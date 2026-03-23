@@ -16,6 +16,7 @@ import it.unive.lisa.symbolic.value.operator.MultiplicationOperator;
 import it.unive.lisa.symbolic.value.operator.SubtractionOperator;
 import it.unive.lisa.symbolic.value.operator.binary.*;
 import it.unive.lisa.symbolic.value.operator.unary.NumericNegation;
+import it.unive.lisa.symbolic.value.operator.unary.StringLength;
 import it.unive.lisa.symbolic.value.operator.unary.UnaryOperator;
 import it.unive.lisa.util.numeric.IntInterval;
 import it.unive.lisa.util.numeric.MathNumber;
@@ -142,11 +143,25 @@ public class OverflowInterval
 
 	@Override
 	public OverflowInterval evalNonNullConstant(Constant constant, ProgramPoint pp, SemanticOracle oracle) {
+		if (constant.getValue() instanceof Integer) {
+			Integer i = (Integer) constant.getValue();
+			MathNumber value = new MathNumber(i);
+			return new OverflowInterval(value, value);
+		}
 		return top();
 	}
 
 	@Override
 	public OverflowInterval evalUnaryExpression(UnaryOperator operator, OverflowInterval arg, ProgramPoint pp, SemanticOracle oracle) {
+		if (operator == NumericNegation.INSTANCE)
+			if (arg.isTop())
+				return top();
+			else
+				return normalize(
+						arg.interval.getHigh().multiply(MathNumber.MINUS_ONE),
+						arg.interval.getLow().multiply(MathNumber.MINUS_ONE));
+		else if (operator == StringLength.INSTANCE)
+			return new OverflowInterval(MathNumber.ZERO, MAX_VAL);
 		return top();
 	}
 
