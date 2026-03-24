@@ -167,6 +167,51 @@ public class OverflowInterval
 
 	@Override
 	public OverflowInterval evalBinaryExpression(BinaryOperator operator, OverflowInterval left, OverflowInterval right, ProgramPoint pp, SemanticOracle oracle) {
+		if (left.isBottom() || right.isBottom())
+			return bottom();
+
+		if (!(operator instanceof DivisionOperator) && (left.isTop() || right.isTop()))
+			return top();
+
+		if (operator instanceof AdditionOperator)
+			return normalize(
+					left.interval.getLow().add(right.interval.getLow()),
+					left.interval.getHigh().add(right.interval.getHigh()));
+		else if (operator instanceof SubtractionOperator)
+			return normalize(
+					left.interval.getLow().subtract(right.interval.getHigh()),
+					left.interval.getHigh().subtract(right.interval.getLow()));
+		else if (operator instanceof MultiplicationOperator) {
+			if (left.equals(ZERO) || right.equals(ZERO))
+				return ZERO;
+
+			MathNumber a = left.interval.getLow();
+			MathNumber b = left.interval.getHigh();
+			MathNumber c = right.interval.getLow();
+			MathNumber d = right.interval.getHigh();
+
+			MathNumber ac = a.multiply(c);
+			MathNumber ad = a.multiply(d);
+			MathNumber bc = b.multiply(c);
+			MathNumber bd = b.multiply(d);
+
+			MathNumber low = ac.min(ad).min(bc).min(bd);
+			MathNumber high = ac.max(ad).max(bc).max(bd);
+			return normalize(low, high);
+		} else if (operator instanceof DivisionOperator) {
+			if (right.equals(ZERO))
+				return bottom();
+			else if (left.equals(ZERO))
+				return ZERO;
+			else if (left.isTop() || right.isTop())
+				return top();
+			else {
+				OverflowInterval div = new OverflowInterval(left.interval.div(right.interval, false, false));
+				if (div.equals(BOTTOM))
+					return bottom();
+				return normalize(div.interval.getLow(), div.interval.getHigh());
+			}
+		}
 		return top();
 	}
 

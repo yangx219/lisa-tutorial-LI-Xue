@@ -1,0 +1,28 @@
+class overflow {
+	basic() {
+		def x = 5;
+		def y = -x;
+		def z = x + 2;
+		return z;
+	}
+
+	addOverflow() {
+		def a = 2147483647;
+		def b = a + 1;
+		return b;
+	}
+
+	negOverflow() {
+		def c = -2147483647;
+		def m = c - 1;
+		def d = 0 - m;
+		return d;
+	}
+
+	division() {
+		def e = 0;
+		def f = 5;
+		def g = e / f;
+		return g;
+	}
+}
