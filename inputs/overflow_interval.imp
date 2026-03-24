@@ -26,6 +26,20 @@ class overflow {
 		return g;
 	}
 
+	divByZero() {
+		def x = 5;
+		def y = 0;
+		def z = x / y;
+		return z;
+	}
+
+	mulOverflow() {
+		def x = 50000;
+		def y = 50000;
+		def z = x * y;
+		return z;
+	}
+
 	branches() {
 		def x = 5;
 		def y = 7;
@@ -44,6 +58,15 @@ class overflow {
 			y = x + 1;
 		else
 			y = x - 1;
+		return y;
+	}
+
+	refineRange(a) {
+		def x = a;
+		def y = 0;
+		if (x < 10)
+			if (x > 0)
+				y = x + 1;
 		return y;
 	}
 }
