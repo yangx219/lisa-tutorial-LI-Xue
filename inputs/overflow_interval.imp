@@ -25,4 +25,15 @@ class overflow {
 		def g = e / f;
 		return g;
 	}
+
+	branches() {
+		def x = 5;
+		def y = 7;
+		def z = 0;
+		if (x < y)
+			z = x + 1;
+		else
+			z = y + 1;
+		return z;
+	}
 }

@@ -217,6 +217,61 @@ public class OverflowInterval
 
 	@Override
 	public Satisfiability satisfiesBinaryExpression(BinaryOperator operator, OverflowInterval left, OverflowInterval right, ProgramPoint pp, SemanticOracle oracle) {
+		if (left.isTop() || right.isTop())
+			return Satisfiability.UNKNOWN;
+
+		if (operator == ComparisonEq.INSTANCE) {
+			OverflowInterval glb = null;
+			try {
+				glb = left.glb(right);
+			} catch (SemanticException e) {
+				return Satisfiability.UNKNOWN;
+			}
+
+			if (glb.isBottom())
+				return Satisfiability.NOT_SATISFIED;
+			else if (left.interval.isSingleton() && left.equals(right))
+				return Satisfiability.SATISFIED;
+			return Satisfiability.UNKNOWN;
+		} else if (operator == ComparisonGe.INSTANCE)
+			return satisfiesBinaryExpression(ComparisonLe.INSTANCE, right, left, pp, oracle);
+		else if (operator == ComparisonGt.INSTANCE)
+			return satisfiesBinaryExpression(ComparisonLt.INSTANCE, right, left, pp, oracle);
+		else if (operator == ComparisonLe.INSTANCE) {
+			OverflowInterval glb = null;
+			try {
+				glb = left.glb(right);
+			} catch (SemanticException e) {
+				return Satisfiability.UNKNOWN;
+			}
+
+			if (glb.isBottom())
+				return Satisfiability.fromBoolean(left.interval.getHigh().compareTo(right.interval.getLow()) <= 0);
+			if (glb.interval.isSingleton() && left.interval.getHigh().compareTo(right.interval.getLow()) == 0)
+				return Satisfiability.SATISFIED;
+			return Satisfiability.UNKNOWN;
+		} else if (operator == ComparisonLt.INSTANCE) {
+			OverflowInterval glb = null;
+			try {
+				glb = left.glb(right);
+			} catch (SemanticException e) {
+				return Satisfiability.UNKNOWN;
+			}
+
+			if (glb.isBottom())
+				return Satisfiability.fromBoolean(left.interval.getHigh().compareTo(right.interval.getLow()) < 0);
+			return Satisfiability.UNKNOWN;
+		} else if (operator == ComparisonNe.INSTANCE) {
+			OverflowInterval glb = null;
+			try {
+				glb = left.glb(right);
+			} catch (SemanticException e) {
+				return Satisfiability.UNKNOWN;
+			}
+			if (glb.isBottom())
+				return Satisfiability.SATISFIED;
+			return Satisfiability.UNKNOWN;
+		}
 		return Satisfiability.UNKNOWN;
 	}
 }
