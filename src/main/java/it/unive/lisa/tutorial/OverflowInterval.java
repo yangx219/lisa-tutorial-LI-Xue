@@ -274,4 +274,70 @@ public class OverflowInterval
 		}
 		return Satisfiability.UNKNOWN;
 	}
+
+	@Override
+	public ValueEnvironment<OverflowInterval> assumeBinaryExpression(
+			ValueEnvironment<OverflowInterval> environment,
+			BinaryOperator operator,
+			ValueExpression left,
+			ValueExpression right,
+			ProgramPoint src,
+			ProgramPoint dest,
+			SemanticOracle oracle)
+			throws SemanticException {
+		Identifier id;
+		OverflowInterval eval;
+		boolean rightIsExpr;
+		if (left instanceof Identifier) {
+			eval = eval(right, environment, src, oracle);
+			id = (Identifier) left;
+			rightIsExpr = true;
+		} else if (right instanceof Identifier) {
+			eval = eval(left, environment, src, oracle);
+			id = (Identifier) right;
+			rightIsExpr = false;
+		} else
+			return environment;
+
+		OverflowInterval starting = environment.getState(id);
+		if (eval.isBottom() || starting.isBottom())
+			return environment.bottom();
+
+		boolean lowIsMin = eval.interval.getLow().compareTo(MIN_VAL) == 0;
+		OverflowInterval low_inf = new OverflowInterval(eval.interval.getLow(), MAX_VAL);
+		OverflowInterval lowp1_inf = new OverflowInterval(eval.interval.getLow().add(MathNumber.ONE), MAX_VAL);
+		OverflowInterval inf_high = new OverflowInterval(MIN_VAL, eval.interval.getHigh());
+		OverflowInterval inf_highm1 = new OverflowInterval(MIN_VAL, eval.interval.getHigh().subtract(MathNumber.ONE));
+
+		OverflowInterval update = null;
+		if (operator == ComparisonEq.INSTANCE)
+			update = eval;
+		else if (operator == ComparisonGe.INSTANCE)
+			if (rightIsExpr)
+				update = lowIsMin ? null : starting.glb(low_inf);
+			else
+				update = starting.glb(inf_high);
+		else if (operator == ComparisonGt.INSTANCE)
+			if (rightIsExpr)
+				update = lowIsMin ? null : starting.glb(lowp1_inf);
+			else
+				update = lowIsMin ? eval : starting.glb(inf_highm1);
+		else if (operator == ComparisonLe.INSTANCE)
+			if (rightIsExpr)
+				update = starting.glb(inf_high);
+			else
+				update = lowIsMin ? null : starting.glb(low_inf);
+		else if (operator == ComparisonLt.INSTANCE)
+			if (rightIsExpr)
+				update = lowIsMin ? eval : starting.glb(inf_highm1);
+			else
+				update = lowIsMin ? null : starting.glb(lowp1_inf);
+
+		if (update == null)
+			return environment;
+		else if (update.isBottom())
+			return environment.bottom();
+		else
+			return environment.putState(id, update);
+	}
 }
