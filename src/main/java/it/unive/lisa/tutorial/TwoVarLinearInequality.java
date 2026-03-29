@@ -19,10 +19,8 @@ import it.unive.lisa.symbolic.value.Constant;
 import it.unive.lisa.symbolic.value.BinaryExpression;
 import it.unive.lisa.symbolic.SymbolicExpression;
 import it.unive.lisa.symbolic.value.operator.binary.*;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
+
+import java.util.*;
 import java.util.function.Predicate;
 
 // ax + by ≤ c
@@ -59,13 +57,65 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
 
 
     @Override
-    public boolean lessOrEqual(TwoVarLinearInequality twoVarLinearInequality) throws SemanticException {
-        return false;
+    public boolean lessOrEqual(TwoVarLinearInequality other) throws SemanticException {
+        if (this.isBottom())
+            return true;
+        if (other.isTop())
+            return true;
+        if (this.isTop())
+            return other.isTop();
+        if (other.isBottom())
+            return this.isBottom();
+
+        Set<Inequality> thisClosed = close(this.inequalities);
+        Set<Inequality> otherClosed = close(other.inequalities);
+
+        for (Inequality target : otherClosed) {
+            boolean found = false;
+            for (Inequality mine : thisClosed) {
+                if (mine.entails(target)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+                return false;
+        }
+
+        return true;
     }
 
     @Override
-    public TwoVarLinearInequality lub(TwoVarLinearInequality twoVarLinearInequality) throws SemanticException {
-        return null;
+    public TwoVarLinearInequality lub(TwoVarLinearInequality other) throws SemanticException {
+        if (this.isBottom())
+            return other;
+        if (other.isBottom())
+            return this;
+        if (this.isTop() || other.isTop())
+            return TOP;
+
+        Set<Inequality> result = new HashSet<>();
+
+        for (Inequality ineq1 : this.inequalities) {
+            for (Inequality ineq2 : other.inequalities) {
+
+                if (ineq1.sameLeftPart(ineq2)) {
+                    // keep the larger c
+                    int newC = Math.max(ineq1.getC(), ineq2.getC());
+
+                    result.add(new Inequality(
+                            ineq1.getA(),
+                            ineq1.getX(),
+                            ineq1.getB(),
+                            ineq1.getY(),
+                            newC
+                    ));
+                }
+            }
+        }
+
+        return fromClosedSet(result);
     }
 
     /**
@@ -95,7 +145,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                 newSet.add(new Inequality(-1, identifier, 0, null, -value));
             }
 
-            return new TwoVarLinearInequality(sanitize(newSet));
+            return fromClosedSet(newSet);
         }
 
         // Case 2: x = y
@@ -106,7 +156,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
             //   -x + y <= 0
             newSet.add(new Inequality(-1, identifier, 1, other, 0));
 
-            return new TwoVarLinearInequality(sanitize(newSet));
+            return fromClosedSet(newSet);
         }
 
         // Binary-expression cases
@@ -128,7 +178,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                         // -x + y <= -c
                         newSet.add(new Inequality(-1, identifier, 1, other, -value));
 
-                        return new TwoVarLinearInequality(sanitize(newSet));
+                        return fromClosedSet(newSet);
                     }
 
                     // Case 4: x = y - c
@@ -138,7 +188,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                         // -x + y <= c
                         newSet.add(new Inequality(-1, identifier, 1, other, value));
 
-                        return new TwoVarLinearInequality(sanitize(newSet));
+                        return fromClosedSet(newSet);
                     }
                 }
             }
@@ -154,7 +204,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                     newSet.add(new Inequality(1, identifier, -coeff, other, 0));
                     newSet.add(new Inequality(-1, identifier, coeff, other, 0));
 
-                    return new TwoVarLinearInequality(sanitize(newSet));
+                    return fromClosedSet(newSet);
                 }
             }
 
@@ -186,7 +236,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                             // -x + a*y <= -c
                             newSet.add(new Inequality(-1, identifier, coeff, other, -value));
 
-                            return new TwoVarLinearInequality(sanitize(newSet));
+                            return fromClosedSet(newSet);
                         }
 
                         // x = a*y - c
@@ -196,16 +246,14 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                             // -x + a*y <= c
                             newSet.add(new Inequality(-1, identifier, coeff, other, value));
 
-                            return new TwoVarLinearInequality(sanitize(newSet));
+                            return fromClosedSet(newSet);
                         }
                     }
                 }
             }
         }
 
-        // Unsupported expressions are handled conservatively:
-        // forget the assigned variable and keep all remaining constraints.
-        return new TwoVarLinearInequality(sanitize(newSet));
+        return fromClosedSet(newSet);
     }
 
     @Override
@@ -224,7 +272,6 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
     public TwoVarLinearInequality assume(ValueExpression valueExpression, ProgramPoint programPoint, ProgramPoint programPoint1, SemanticOracle semanticOracle) throws SemanticException {
         if (isBottom())
             return this;
-
         if (!(valueExpression instanceof BinaryExpression))
             return this;
 
@@ -240,16 +287,28 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
             Identifier x = (Identifier) left;
             Identifier y = (Identifier) right;
 
-            if (operator instanceof ComparisonLe || operator instanceof ComparisonLt) {
+            if (operator instanceof ComparisonLe) {
                 // x - y <= 0
                 newSet.add(new Inequality(1, x, -1, y, 0));
-                return new TwoVarLinearInequality(sanitize(newSet));
+                return fromClosedSet(newSet);
             }
 
-            if (operator instanceof ComparisonGe || operator instanceof ComparisonGt) {
+            if (operator instanceof ComparisonLt) {
+                // x - y <= -1
+                newSet.add(new Inequality(1, x, -1, y, -1));
+                return fromClosedSet(newSet);
+            }
+
+            if (operator instanceof ComparisonGe) {
                 // y - x <= 0
                 newSet.add(new Inequality(1, y, -1, x, 0));
-                return new TwoVarLinearInequality(sanitize(newSet));
+                return fromClosedSet(newSet);
+            }
+
+            if (operator instanceof ComparisonGt) {
+                // y - x <= -1
+                newSet.add(new Inequality(1, y, -1, x, -1));
+                return fromClosedSet(newSet);
             }
 
             if (operator instanceof ComparisonEq) {
@@ -257,7 +316,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                 newSet.add(new Inequality(1, x, -1, y, 0));
                 // y - x <= 0
                 newSet.add(new Inequality(1, y, -1, x, 0));
-                return new TwoVarLinearInequality(sanitize(newSet));
+                return fromClosedSet(newSet);
             }
         }
 
@@ -269,16 +328,28 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
             if (constant.getValue() instanceof Integer) {
                 int value = (Integer) constant.getValue();
 
-                if (operator instanceof ComparisonLe || operator instanceof ComparisonLt) {
+                if (operator instanceof ComparisonLe) {
                     // x <= c
                     newSet.add(new Inequality(1, x, 0, null, value));
-                    return new TwoVarLinearInequality(sanitize(newSet));
+                    return fromClosedSet(newSet);
                 }
 
-                if (operator instanceof ComparisonGe || operator instanceof ComparisonGt) {
+                if (operator instanceof ComparisonLt) {
+                    // x <= c - 1
+                    newSet.add(new Inequality(1, x, 0, null, value - 1));
+                    return fromClosedSet(newSet);
+                }
+
+                if (operator instanceof ComparisonGe) {
                     // -x <= -c
                     newSet.add(new Inequality(-1, x, 0, null, -value));
-                    return new TwoVarLinearInequality(sanitize(newSet));
+                    return fromClosedSet(newSet);
+                }
+
+                if (operator instanceof ComparisonGt) {
+                    // -x <= -(c + 1)
+                    newSet.add(new Inequality(-1, x, 0, null, -(value + 1)));
+                    return fromClosedSet(newSet);
                 }
 
                 if (operator instanceof ComparisonEq) {
@@ -286,7 +357,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                     newSet.add(new Inequality(1, x, 0, null, value));
                     // -x <= -c
                     newSet.add(new Inequality(-1, x, 0, null, -value));
-                    return new TwoVarLinearInequality(sanitize(newSet));
+                    return fromClosedSet(newSet);
                 }
             }
         }
@@ -334,17 +405,166 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
 
     @Override
     public Satisfiability satisfies(ValueExpression valueExpression, ProgramPoint programPoint, SemanticOracle semanticOracle) throws SemanticException {
-        return null;
+        if (isBottom())
+            return Satisfiability.BOTTOM;
+
+        if (!(valueExpression instanceof BinaryExpression))
+            return Satisfiability.UNKNOWN;
+
+        BinaryExpression binary = (BinaryExpression) valueExpression;
+        BinaryOperator operator = binary.getOperator();
+
+        if (binary.getLeft() instanceof Identifier && binary.getRight() instanceof Identifier) {
+            Identifier x = (Identifier) binary.getLeft();
+            Identifier y = (Identifier) binary.getRight();
+
+            // x <= y
+            if (operator instanceof ComparisonLe) {
+                if (entailsVarLe(x, y))
+                    return Satisfiability.SATISFIED;
+
+                // y - x <= -1  =>  x <= y is impossible
+                if (containsEntailing(new Inequality(1, y, -1, x, -1)))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x < y   =>   x - y <= -1
+            if (operator instanceof ComparisonLt) {
+                if (containsEntailing(new Inequality(1, x, -1, y, -1)))
+                    return Satisfiability.SATISFIED;
+
+                // y <= x  =>  x < y is impossible
+                if (entailsVarLe(y, x))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x >= y
+            if (operator instanceof ComparisonGe) {
+                if (entailsVarLe(y, x))
+                    return Satisfiability.SATISFIED;
+
+                // x - y <= -1  =>  x >= y is impossible
+                if (containsEntailing(new Inequality(1, x, -1, y, -1)))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x > y   =>   y - x <= -1
+            if (operator instanceof ComparisonGt) {
+                if (containsEntailing(new Inequality(1, y, -1, x, -1)))
+                    return Satisfiability.SATISFIED;
+
+                // x <= y  =>  x > y is impossible
+                if (entailsVarLe(x, y))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x == y
+            if (operator instanceof ComparisonEq) {
+                boolean xy = entailsVarLe(x, y);
+                boolean yx = entailsVarLe(y, x);
+
+                if (xy && yx)
+                    return Satisfiability.SATISFIED;
+
+                if (containsEntailing(new Inequality(1, x, -1, y, -1))
+                        || containsEntailing(new Inequality(1, y, -1, x, -1)))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+        }
+
+        if (binary.getLeft() instanceof Identifier && binary.getRight() instanceof Constant) {
+            Identifier x = (Identifier) binary.getLeft();
+            Constant constant = (Constant) binary.getRight();
+
+            if (!(constant.getValue() instanceof Integer))
+                return Satisfiability.UNKNOWN;
+
+            int value = (Integer) constant.getValue();
+
+            // x <= c
+            if (operator instanceof ComparisonLe) {
+                if (entailsUpperBound(x, value))
+                    return Satisfiability.SATISFIED;
+
+                // x >= value + 1  =>  x <= value is impossible
+                if (entailsLowerBound(x, value + 1))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x < c   =>   x <= c - 1
+            if (operator instanceof ComparisonLt) {
+                if (entailsUpperBound(x, value - 1))
+                    return Satisfiability.SATISFIED;
+
+                // x >= c  =>  x < c is impossible
+                if (entailsLowerBound(x, value))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x >= c
+            if (operator instanceof ComparisonGe) {
+                if (entailsLowerBound(x, value))
+                    return Satisfiability.SATISFIED;
+
+                // x <= value - 1  =>  x >= value is impossible
+                if (entailsUpperBound(x, value - 1))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x > c   =>   x >= c + 1
+            if (operator instanceof ComparisonGt) {
+                if (entailsLowerBound(x, value + 1))
+                    return Satisfiability.SATISFIED;
+
+                // x <= c  =>  x > c is impossible
+                if (entailsUpperBound(x, value))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+
+            // x == c
+            if (operator instanceof ComparisonEq) {
+                boolean upper = entailsUpperBound(x, value);
+                boolean lower = entailsLowerBound(x, value);
+
+                if (upper && lower)
+                    return Satisfiability.SATISFIED;
+
+                if (entailsUpperBound(x, value - 1) || entailsLowerBound(x, value + 1))
+                    return Satisfiability.NOT_SATISFIED;
+
+                return Satisfiability.UNKNOWN;
+            }
+        }
+
+        return Satisfiability.UNKNOWN;
     }
 
     @Override
     public TwoVarLinearInequality pushScope(ScopeToken scopeToken) throws SemanticException {
-        return null;
+        return this;
     }
 
     @Override
     public TwoVarLinearInequality popScope(ScopeToken scopeToken) throws SemanticException {
-        return null;
+        return this;
     }
 
     @Override
@@ -355,7 +575,35 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
         if (isBottom())
             return Lattice.bottomRepresentation();
 
-        return new StringRepresentation(inequalities.toString());
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+
+        boolean first = true;
+        for (Inequality ineq : close(inequalities)) {
+            boolean show = true;
+
+            if (ineq.getX() != null) {
+                String name = ineq.getX().getName();
+                if (name.contains("@") || name.contains("pp") || name.equals("this"))
+                    show = false;
+            }
+
+            if (ineq.getY() != null) {
+                String name = ineq.getY().getName();
+                if (name.contains("@") || name.contains("pp") || name.equals("this"))
+                    show = false;
+            }
+
+            if (show) {
+                if (!first)
+                    sb.append(", ");
+                sb.append(ineq.toString());
+                first = false;
+            }
+        }
+
+        sb.append("]");
+        return new StringRepresentation(sb.toString());
     }
     //helper and debug
     @Override
@@ -429,7 +677,174 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
     }
 
 
+    //checks whether the current state contains an inequality that entails the target one
+    private boolean containsEntailing(Inequality target) {
+        Set<Inequality> closed = close(inequalities);
+        for (Inequality ineq : closed ) {
+            if (ineq.entails(target))
+                return true;
+        }
+        return false;
+    }
 
+    //returns true if the current state entails x <= bound
+    private boolean entailsUpperBound(Identifier x, int bound) {
+        return containsEntailing(new Inequality(1, x, 0, null, bound));
+    }
+
+    //returns true if the current state entails x >= bound
+    private boolean entailsLowerBound(Identifier x, int bound) {
+        return containsEntailing(new Inequality(-1, x, 0, null, -bound));
+    }
+
+    //returns true if the current state entails x <= y
+    private boolean entailsVarLe(Identifier x, Identifier y) {
+        return containsEntailing(new Inequality(1, x, -1, y, 0));
+    }
+    //paper：define9
+    private Set<Inequality> result(Set<Inequality> set) {
+        Set<Inequality> generated = new HashSet<>();
+
+        // iterate over all pairs of inequalities
+        for (Inequality i1 : set) {
+            for (Inequality i2 : set) {
+
+                if (i1 == i2)
+                    continue;
+
+                // find common variables between i1 and i2
+                Set<Identifier> common = new HashSet<>(i1.variables());
+                common.retainAll(i2.variables());
+
+                // try eliminating each common variable
+                for (Identifier pivot : common) {
+
+                    int c1 = i1.coefficientOf(pivot);
+                    int c2 = i2.coefficientOf(pivot);
+
+                    // only eliminate if coefficients have opposite signs
+                    if (c1 == 0 || c2 == 0 || c1 * c2 >= 0)
+                        continue;
+
+                    // perform elimination
+                    Inequality newIneq = eliminateVariable(i1, i2, pivot);
+
+                    if (newIneq != null)
+                        generated.add(newIneq.normalize());
+                }
+            }
+        }
+
+        return sanitize(generated);
+    }
+    private void accumulate(Map<Identifier, Integer> coeffs,
+                            Identifier id,
+                            int value,
+                            Identifier pivot) {
+
+        if (id == null || value == 0 || id.equals(pivot))
+            return;
+
+        coeffs.merge(id, value, Integer::sum);
+    }
+    /**
+     * Eliminates a variable (pivot) from two inequalities.
+     *
+     * Example:
+     *      x - y <= 0
+     *      y - z <= 0
+     *
+     * pivot = y
+     * result = x - z <= 0
+     */
+    private Inequality eliminateVariable(Inequality i1, Inequality i2, Identifier pivot) {
+
+        int p1 = i1.coefficientOf(pivot);
+        int p2 = i2.coefficientOf(pivot);
+
+        if (p1 == 0 || p2 == 0 || p1 * p2 >= 0)
+            return null;
+
+        // scale to cancel pivot
+        int m1 = Math.abs(p2);
+        int m2 = Math.abs(p1);
+
+        // new constant
+        int newC = m1 * i1.getC() + m2 * i2.getC();
+
+        Map<Identifier, Integer> coeffs = new HashMap<>();
+
+        // accumulate coefficients except pivot
+        accumulate(coeffs, i1.getX(), m1 * i1.getA(), pivot);
+        accumulate(coeffs, i1.getY(), m1 * i1.getB(), pivot);
+
+        accumulate(coeffs, i2.getX(), m2 * i2.getA(), pivot);
+        accumulate(coeffs, i2.getY(), m2 * i2.getB(), pivot);
+
+        coeffs.entrySet().removeIf(e -> e.getValue() == 0);
+
+        Identifier x = null, y = null;
+        int a = 0, b = 0;
+
+        Iterator<Map.Entry<Identifier, Integer>> it = coeffs.entrySet().iterator();
+
+        if (it.hasNext()) {
+            var e1 = it.next();
+            x = e1.getKey();
+            a = e1.getValue();
+        }
+
+        if (it.hasNext()) {
+            var e2 = it.next();
+            y = e2.getKey();
+            b = e2.getValue();
+        }
+
+        return new Inequality(a, x, b, y, newC).normalize();
+    }
+    /**
+     * Computes the closure of a set of inequalities.
+     * We repeatedly generate new inequalities using the result operator
+     * until no new information can be derived.
+     */
+    private Set<Inequality> close(Set<Inequality> set) {
+        Set<Inequality> current = sanitize(set);
+
+        while (true) {
+            // if already bottom, stop immediately
+            if (isBottomSet(current))
+                return current;
+
+            Set<Inequality> next = new HashSet<>(current);
+            next.addAll(result(current));
+            next = sanitize(next);
+
+            if (next.equals(current))
+                return next;
+
+            current = next;
+        }
+    }
+
+    private boolean isBottomSet(Set<Inequality> set) {
+        return set.size() == 1 && set.iterator().next().isUnsatisfiable();
+    }
+
+    private boolean isUnsat(Set<Inequality> set) {
+        for (Inequality ineq : set) {
+            if (ineq.isUnsatisfiable())
+                return true;
+        }
+        return false;
+    }
+    private TwoVarLinearInequality fromClosedSet(Set<Inequality> set) {
+        Set<Inequality> closed = close(set);
+
+        if (isUnsat(closed))
+            return bottom();
+
+        return new TwoVarLinearInequality(closed);
+    }
     public static class Inequality {
         private final int a;
         private final Identifier x;
@@ -506,6 +921,63 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
             if (y != null && b != 0)
                 vars.add(y);
             return vars;
+        }
+        public int coefficientOf(Identifier id) {
+            if (x != null && x.equals(id))
+                return a;
+
+            if (y != null && y.equals(id))
+                return b;
+
+            return 0;
+        }
+        //Greatest Common Divisor
+        private static int gcd(int a, int b) {
+            a = Math.abs(a);
+            b = Math.abs(b);
+            while (b != 0) {
+                int t = a % b;
+                a = b;
+                b = t;
+            }
+            return a == 0 ? 1 : a;
+        }
+
+        public Inequality normalize() {
+            int na = a;
+            int nb = b;
+            int nc = c;
+            Identifier nx = x;
+            Identifier ny = y;
+
+            // compute gcd of coefficients and constant
+            int g = gcd(gcd(na, nb), nc);
+            if (g != 0) {
+                na /= g;
+                nb /= g;
+                nc /= g;
+            }
+
+            // canonical ordering of variables:
+            // if both variables are present, keep them ordered by name
+            if (nx != null && ny != null && nx.getName().compareTo(ny.getName()) > 0) {
+                Identifier tmpId = nx;
+                nx = ny;
+                ny = tmpId;
+
+                int tmpCoeff = na;
+                na = nb;
+                nb = tmpCoeff;
+            }
+
+            // first non-zero coefficient must be positive
+            if (na < 0 || (na == 0 && nb < 0)) {
+                na = -na;
+                nb = -nb;
+                nc = -nc;
+            }
+
+            return new Inequality(na, nx, nb, ny, nc);
         }
 
         @Override
