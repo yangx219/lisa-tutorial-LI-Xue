@@ -5,8 +5,11 @@
 - YANG Xue
 
 ## Implemented Domains
-- `OverflowInterval` (non-relational domain)
-- `TwoVarLinearInequality` (relational domain, to be completed)
+- `OverflowInterval` (non-relational domain, difficulty 4) — implemented by YANG Xue
+- `TwoVarLinearInequality` (relational domain, difficulty 4) — implemented by LI Mengxiao
+- `OverflowIntervalTwoVarCartesian` (Cartesian product) — implemented by LI Mengxiao
+
+---
 
 ## Domain 1: OverflowInterval
 
@@ -14,63 +17,191 @@
 **Test file:** `src/test/java/it/unive/lisa/tutorial/OverflowIntervalTest.java`  
 **IMP program:** `inputs/overflow_interval.imp`
 
-`OverflowInterval` is a bounded interval domain for 32-bit signed integers. It is based on the standard interval domain shown during the course and adapts it to machine arithmetic with overflow.
+### Description
 
-### Main idea
+`OverflowInterval` is a non-relational abstract domain based on the standard interval domain (course section 4.5), extended to handle 32-bit signed integer overflow.
 
-Instead of using unbounded mathematical integers, this domain restricts values to the machine range:
+In the standard interval domain, variable values are represented as mathematical intervals `[low, high]` with bounds in `ℤ ∪ {-∞, +∞}`. This domain adapts that idea to machine arithmetic by restricting all bounds to the 32-bit signed integer range:
 
-- `Integer.MIN_VALUE = -2147483648`
-- `Integer.MAX_VALUE = 2147483647`
+- `MIN = Integer.MIN_VALUE = -2147483648`
+- `MAX = Integer.MAX_VALUE = 2147483647`
 
-The lattice is still interval-based, but:
+The key design decision is the **`normalize` function**: after every arithmetic operation, the result interval is checked against the machine range. If it fits within `[MIN, MAX]`, the precise interval is returned. If any bound exceeds the machine range, the result is conservatively approximated as `TOP = [MIN, MAX]`, meaning the value is unknown but still within the machine range.
 
-- `TOP = [Integer.MIN_VALUE, Integer.MAX_VALUE]`
-- `BOTTOM` represents an unreachable state
+This design is **sound**: the analysis never claims a value is in an interval when the concrete value might lie outside it. It is simpler than the wrapped-interval approach from the reference paper, but fully compatible with LiSA's `BaseNonRelationalValueDomain` structure.
 
-Arithmetic operations are first evaluated using interval arithmetic, and then normalized with respect to machine bounds. If the result exceeds the 32-bit signed range, it is conservatively approximated by `TOP`.
+### Lattice Structure
 
-This implementation is inspired by the overflow-aware setting discussed in the course material and in the wrapped-interval reference paper, but it adopts a simpler sound approximation that remains compatible with LiSA's standard non-relational lattice structure.
+| Element | Representation | Meaning |
+|---------|---------------|---------|
+| `TOP`   | `[MIN, MAX]`  | Any 32-bit integer value |
+| `BOTTOM`| `⊥`           | Unreachable state |
+| `[a,b]` | `[a, b]`      | Variable is in the range `[a,b]` |
 
-### Implemented operations
+Lattice operations:
 
-The domain currently implements:
+| Operation | Definition |
+|-----------|-----------|
+| `lessOrEqual(a, b)` | `b.low ≤ a.low` and `a.high ≤ b.high` (b contains a) |
+| `lub(a, b)` | `normalize(min(a.low, b.low), max(a.high, b.high))` |
+| `glb(a, b)` | `normalize(max(a.low, b.low), min(a.high, b.high))`, or `BOTTOM` if empty |
+| `widening(a, b)` | Expands toward `MIN`/`MAX` instead of `±∞` to ensure termination |
 
-- lattice operations: `top`, `bottom`, `lessOrEqual`, `lub`, `glb`, `widening`
-- evaluation of integer constants
-- unary negation
-- binary arithmetic operators: addition, subtraction, multiplication, division
-- comparison satisfiability: `==`, `!=`, `<`, `<=`, `>`, `>=`
-- branch refinement through `assumeBinaryExpression`
+### Abstract Semantics
 
-### Test program and observed results
+**Constant evaluation:** An integer constant `c` evaluates to the singleton interval `[c, c]`.
 
-The file `inputs/overflow_interval.imp` contains several small programs used to validate the behavior of the domain.
+**Unary negation:** `-[a, b]` is computed as `normalize(-b, -a)`. For example, `-[2, 5] = [-5, -2]`. Negating `MIN_VALUE` overflows and yields `TOP`.
 
-- `basic()`:
-  precise arithmetic is preserved:
-  `x = [5,5]`, `y = [-5,-5]`, `z = [7,7]`
+**Binary arithmetic:**
 
-- `addOverflow()`:
-  `2147483647 + 1` overflows, so the result is approximated as `TOP`
+| Operator | Formula | Overflow handling |
+|----------|---------|-------------------|
+| `[a,b] + [c,d]` | `normalize(a+c, b+d)` | `MAX+1` → `TOP` |
+| `[a,b] - [c,d]` | `normalize(a-d, b-c)` | `0-MIN` → `TOP` |
+| `[a,b] * [c,d]` | `normalize(min(ac,ad,bc,bd), max(ac,ad,bc,bd))` | `50000*50000` → `TOP` |
+| `[a,b] / [c,d]` | Uses `IntInterval.div`; divisor `[0,0]` → `BOTTOM` | Sound division |
 
-- `negOverflow()`:
-  negating `Integer.MIN_VALUE` causes overflow, so the result is `TOP`
+**Comparison satisfiability (`satisfiesBinaryExpression`):** Determines whether a binary comparison is `SATISFIED`, `NOT_SATISFIED`, or `UNKNOWN` by analysing interval overlap and bounds. For example, `[3,5] < [7,9]` is `SATISFIED` since no overlap and `5 < 7`.
 
-- `division()`:
-  `0 / 5` is precisely analyzed as `[0,0]`
+**Branch refinement (`assumeBinaryExpression`):** When entering a conditional branch, the variable's interval is intersected with the range implied by the condition. For example, after `if (x < 10)`, the variable `x` is refined from `[MIN,MAX]` to `[MIN,9]`.
 
-- `divByZero()`:
-  division by zero yields `BOTTOM`
+### Test Program and Analysis Results
 
-- `mulOverflow()`:
-  `50000 * 50000` exceeds the 32-bit range, so the result is `TOP`
+The file `inputs/overflow_interval.imp` contains nine test functions covering normal arithmetic, overflow detection, division semantics, and branch refinement.
 
-- `branches()`:
-  the comparison `x < y` is recognized as satisfied, and the final result is precise
+---
 
-- `refine()` and `refineRange()`:
-  branch assumptions refine intervals inside conditionals; for example, in `refineRange()` the analysis narrows `x` to `[1,9]` in the branch guarded by `x < 10` and `x > 0`
+#### `basic()` — Precise arithmetic with no overflow
+
+```java
+basic() {
+    def x = 5;     // x = [5,5]
+    def y = -x;    // y = [-5,-5]
+    def z = x + 2; // z = [7,7]
+    return z;
+}
+```
+
+All values stay within the machine range. The analysis is precise throughout.
+
+![basic](images/overflow_basic.png)
+
+---
+
+#### `addOverflow()` — Addition overflow
+
+```java
+addOverflow() {
+    def a = 2147483647;  // a = [MAX, MAX]
+    def b = a + 1;       // MAX+1 overflows → b = TOP
+    return b;
+}
+```
+
+`2147483647 + 1` exceeds `MAX`. The `normalize` function detects this and returns `TOP`.
+
+![addOverflow](images/overflow_addOverflow.png)
+
+---
+
+#### `negOverflow()` — Negation overflow at MIN_VALUE
+
+```java
+negOverflow() {
+    def c = -2147483647;  // c = [-MAX, -MAX]
+    def m = c - 1;        // m = [MIN, MIN]
+    def d = 0 - m;        // -MIN overflows → d = TOP
+    return d;
+}
+```
+
+`Integer.MIN_VALUE` can be represented exactly, but negating it (`-MIN = MAX+1`) overflows.
+
+![negOverflow](images/overflow_negOverflow.png)
+
+---
+
+#### `divByZero()` — Division by zero yields BOTTOM
+
+```java
+divByZero() {
+    def x = 5;
+    def y = 0;
+    def z = x / y;  // division by [0,0] → BOTTOM
+    return z;
+}
+```
+
+When the divisor is precisely `[0,0]`, the domain returns `BOTTOM`, marking this path as unreachable (potential runtime error).
+
+![divByZero](images/overflow_divByZero.png)
+
+---
+
+#### `mulOverflow()` — Multiplication overflow
+
+```java
+mulOverflow() {
+    def x = 50000;
+    def y = 50000;
+    def z = x * y;  // 2.5×10^9 > MAX → z = TOP
+    return z;
+}
+```
+
+`50000 × 50000 = 2,500,000,000`, which exceeds `MAX = 2,147,483,647`.
+
+![mulOverflow](images/overflow_mulOverflow.png)
+
+---
+
+#### `branches()` — Precise branch analysis
+
+```java
+branches() {
+    def x = 5;
+    def y = 7;
+    def z = 0;
+    if (x < y) z = x + 1;
+    else        z = y + 1;
+    return z;
+}
+```
+
+`satisfiesBinaryExpression` determines that `[5,5] < [7,7]` is `SATISFIED`, so the else branch is unreachable. The final result is precisely `z = [6,6]`.
+
+![branches](images/overflow_branches.png)
+
+---
+
+#### `refineRange(a)` — Nested branch refinement
+
+```java
+refineRange(a) {
+    def x = a;        // x = TOP (unknown parameter)
+    def y = 0;
+    if (x < 10)       // x refined to [MIN, 9]
+        if (x > 0)    // x further refined to [1, 9]
+            y = x + 1; // y = [2, 10]
+    return y;
+}
+```
+
+`assumeBinaryExpression` successively narrows `x`:
+- After `x < 10`: `x ∩ [MIN, 9] = [MIN, 9]`
+- After `x > 0`: `x ∩ [1, MAX] = [1, 9]`
+- Result: `y = [1,9] + [1,1] = [2, 10]`
+
+This demonstrates that the domain correctly tracks value ranges through nested conditionals.
+
+![refineRange](images/overflow_refineRange.png)
+
+### Limitations
+
+- **Overflow loses all precision**: any operation that exceeds the 32-bit range returns `TOP` rather than a wrapped interval. This is sound but may be less precise than a wrapped-interval approach.
+- **No relational information**: as a non-relational domain, it cannot represent relationships between variables (e.g., `x < y`).
+- **Widening to bounds**: the widening operator jumps directly to `MIN`/`MAX`, which is sound but may cause fast precision loss in loop analysis.
 
 ## Domain 2: TwoVarLinearInequality
 
