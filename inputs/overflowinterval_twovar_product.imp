@@ -1,0 +1,14 @@
+class overflowinterval_twovar_product {
+
+    product_test() {
+        def x = 0;
+        def y = x + 1;
+        def z = y + 1;
+
+        if (x < y) {
+            if (y < z) {
+                def a = z;
+            }
+        }
+    }
+}
