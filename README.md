@@ -83,7 +83,7 @@ basic() {
 }
 ```
 
-All values stay within the machine range. The analysis is precise throughout.
+All values stay within the machine range. The analysis is precise throughout: `x = [5,5]`, `y = [-5,-5]`, `z = [7,7]`.
 
 ![basic](images/overflow_basic.png)
 
@@ -99,7 +99,7 @@ addOverflow() {
 }
 ```
 
-`2147483647 + 1` exceeds `MAX`. The `normalize` function detects this and returns `TOP`.
+`2147483647 + 1` exceeds `MAX`. The `normalize` function detects this and returns `TOP = [MIN, MAX]`.
 
 ![addOverflow](images/overflow_addOverflow.png)
 
@@ -109,16 +109,33 @@ addOverflow() {
 
 ```java
 negOverflow() {
-    def c = -2147483647;  // c = [-MAX, -MAX]
-    def m = c - 1;        // m = [MIN, MIN]
+    def c = -2147483647;  // c = [-(MAX), -(MAX)]
+    def m = c - 1;        // m = [MIN, MIN]  (precise, in range)
     def d = 0 - m;        // -MIN overflows → d = TOP
     return d;
 }
 ```
 
-`Integer.MIN_VALUE` can be represented exactly, but negating it (`-MIN = MAX+1`) overflows.
+`Integer.MIN_VALUE` itself is representable exactly as `[MIN, MIN]`, but negating it (`-MIN = MAX+1`) exceeds the machine range, so `d = TOP`.
 
 ![negOverflow](images/overflow_negOverflow.png)
+
+---
+
+#### `division()` — Precise integer division
+
+```java
+division() {
+    def e = 0;
+    def f = 5;
+    def g = e / f;  // [0,0] / [5,5] = [0,0]
+    return g;
+}
+```
+
+The dividend is `[0,0]`, so the result is precisely `[0,0]`. No overflow occurs.
+
+![division](images/overflow_division.png)
 
 ---
 
@@ -128,12 +145,12 @@ negOverflow() {
 divByZero() {
     def x = 5;
     def y = 0;
-    def z = x / y;  // division by [0,0] → BOTTOM
+    def z = x / y;  // divisor = [0,0] → BOTTOM
     return z;
 }
 ```
 
-When the divisor is precisely `[0,0]`, the domain returns `BOTTOM`, marking this path as unreachable (potential runtime error).
+When the divisor is precisely `[0,0]`, the domain returns `BOTTOM`, marking this execution path as unreachable — the analysis detects a potential division-by-zero error.
 
 ![divByZero](images/overflow_divByZero.png)
 
@@ -150,7 +167,7 @@ mulOverflow() {
 }
 ```
 
-`50000 × 50000 = 2,500,000,000`, which exceeds `MAX = 2,147,483,647`.
+`50000 × 50000 = 2,500,000,000`, which exceeds `MAX = 2,147,483,647`. The four-corner product check detects this and `normalize` returns `TOP`.
 
 ![mulOverflow](images/overflow_mulOverflow.png)
 
@@ -163,15 +180,35 @@ branches() {
     def x = 5;
     def y = 7;
     def z = 0;
-    if (x < y) z = x + 1;
-    else        z = y + 1;
+    if (x < y) z = x + 1;  // taken: z = [6,6]
+    else        z = y + 1;  // unreachable
     return z;
 }
 ```
 
-`satisfiesBinaryExpression` determines that `[5,5] < [7,7]` is `SATISFIED`, so the else branch is unreachable. The final result is precisely `z = [6,6]`.
+`satisfiesBinaryExpression` determines that `[5,5] < [7,7]` is `SATISFIED`, so the else branch is recognised as unreachable. The final result is precisely `z = [6,6]`.
 
 ![branches](images/overflow_branches.png)
+
+---
+
+#### `refine(a)` — Single branch refinement
+
+```java
+refine(a) {
+    def x = a;          // x = TOP
+    def y = 0;
+    if (x < 10)
+        y = x + 1;      // then: x in [MIN,9], y in [MIN+1,10]
+    else
+        y = x - 1;      // else: x in [10,MAX], y in [9,MAX-1]
+    return y;           // lub: y = [MIN+1, MAX-1]
+}
+```
+
+After merging both branches via `lub`, `y = [-2147483647, 2147483646]`. This is the exact join of `[MIN+1, 10]` and `[9, MAX-1]`, confirming that branch refinement and `lub` work correctly together.
+
+![refine](images/overflow_refine.png)
 
 ---
 
@@ -179,11 +216,11 @@ branches() {
 
 ```java
 refineRange(a) {
-    def x = a;        // x = TOP (unknown parameter)
+    def x = a;          // x = TOP
     def y = 0;
-    if (x < 10)       // x refined to [MIN, 9]
-        if (x > 0)    // x further refined to [1, 9]
-            y = x + 1; // y = [2, 10]
+    if (x < 10)         // x refined to [MIN, 9]
+        if (x > 0)      // x further refined to [1, 9]
+            y = x + 1;  // y = [2, 10]
     return y;
 }
 ```
@@ -191,9 +228,9 @@ refineRange(a) {
 `assumeBinaryExpression` successively narrows `x`:
 - After `x < 10`: `x ∩ [MIN, 9] = [MIN, 9]`
 - After `x > 0`: `x ∩ [1, MAX] = [1, 9]`
-- Result: `y = [1,9] + [1,1] = [2, 10]`
+- Result inside the inner branch: `y = [1,9] + [1,1] = [2,10]`
 
-This demonstrates that the domain correctly tracks value ranges through nested conditionals.
+This is the key demonstration that the domain correctly tracks value ranges through nested conditionals.
 
 ![refineRange](images/overflow_refineRange.png)
 
