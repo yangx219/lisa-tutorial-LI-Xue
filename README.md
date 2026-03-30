@@ -5,13 +5,13 @@
 - YANG Xue
 
 ## Implemented Domains
-- `OverflowInterval` (non-relational domain, difficulty 4)
-- `TwoVarLinearInequality` (relational domain, difficulty 4)
-- `OverflowIntervalTwoVarCartesian` (Cartesian product)
+- `OverflowInterval` — Intervals taking into account overflows (non-relational domain, difficulty 4)
+- `TwoVarLinearInequality` — Two variables per linear inequality (relational domain, difficulty 4)
+- `OverflowIntervalTwoVarCartesian` — Cartesian product of the two domains above
 
 ---
 
-## Domain 1: OverflowInterval
+## Domain 1: OverflowInterval — Intervals taking into account overflows
 
 **Implementation file:** `src/main/java/it/unive/lisa/tutorial/OverflowInterval.java`  
 **Test file:** `src/test/java/it/unive/lisa/tutorial/OverflowIntervalTest.java`  
