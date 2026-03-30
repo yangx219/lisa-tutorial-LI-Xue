@@ -5,9 +5,9 @@
 - YANG Xue
 
 ## Implemented Domains
-- `OverflowInterval` (non-relational domain, difficulty 4) — implemented by YANG Xue
-- `TwoVarLinearInequality` (relational domain, difficulty 4) — implemented by LI Mengxiao
-- `OverflowIntervalTwoVarCartesian` (Cartesian product) — implemented by LI Mengxiao
+- `OverflowInterval` (non-relational domain, difficulty 4)
+- `TwoVarLinearInequality` (relational domain, difficulty 4)
+- `OverflowIntervalTwoVarCartesian` (Cartesian product)
 
 ---
 
