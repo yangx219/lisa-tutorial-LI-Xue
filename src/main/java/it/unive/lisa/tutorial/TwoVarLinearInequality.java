@@ -575,35 +575,49 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
         if (isBottom())
             return Lattice.bottomRepresentation();
 
+        Set<Inequality> closed = close(inequalities);
+
         StringBuilder sb = new StringBuilder();
-        sb.append("[");
+        sb.append("TwoVarLinearInequality{\n");
 
-        boolean first = true;
-        for (Inequality ineq : close(inequalities)) {
-            boolean show = true;
-
-            if (ineq.getX() != null) {
-                String name = ineq.getX().getName();
-                if (name.contains("@") || name.contains("pp") || name.equals("this"))
-                    show = false;
-            }
-
-            if (ineq.getY() != null) {
-                String name = ineq.getY().getName();
-                if (name.contains("@") || name.contains("pp") || name.equals("this"))
-                    show = false;
-            }
-
-            if (show) {
-                if (!first)
-                    sb.append(", ");
-                sb.append(ineq.toString());
-                first = false;
-            }
+        Set<Identifier> userVars = new TreeSet<>(Comparator.comparing(Identifier::getName));
+        for (Inequality ineq : closed) {
+            if (ineq.getX() != null && isUserVariable(ineq.getX()))
+                userVars.add(ineq.getX());
+            if (ineq.getY() != null && isUserVariable(ineq.getY()))
+                userVars.add(ineq.getY());
         }
 
-        sb.append("]");
+        for (Identifier id : userVars) {
+            sb.append("  ").append(id.getName()).append(" -> {\n");
+
+            Set<Inequality> related = new TreeSet<>(Comparator.comparing(Inequality::toString));
+            for (Inequality ineq : closed) {
+                boolean show = true;
+
+                if (ineq.getX() != null && !isUserVariable(ineq.getX()))
+                    show = false;
+                if (ineq.getY() != null && !isUserVariable(ineq.getY()))
+                    show = false;
+
+                if (show && ineq.involves(id))
+                    related.add(ineq);
+            }
+
+            for (Inequality ineq : related) {
+                sb.append("    ").append(ineq.toString()).append(",\n");
+            }
+
+            sb.append("  }\n");
+        }
+
+        sb.append("}");
         return new StringRepresentation(sb.toString());
+    }
+
+    private boolean isUserVariable(Identifier id) {
+        String name = id.getName();
+        return !name.contains("@") && !name.contains("pp") && !name.equals("this");
     }
     //helper and debug
     @Override
