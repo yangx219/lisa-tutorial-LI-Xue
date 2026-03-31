@@ -240,16 +240,328 @@ This is the key demonstration that the domain correctly tracks value ranges thro
 - **No relational information**: as a non-relational domain, it cannot represent relationships between variables (e.g., `x < y`).
 - **Widening to bounds**: the widening operator jumps directly to `MIN`/`MAX`, which is sound but may cause fast precision loss in loop analysis.
 
+
+---
 ## Domain 2: TwoVarLinearInequality
+**Implementation file:** `src/main/java/it/unive/lisa/tutorial/TwoVarLinearInequality.java`  
+**Test file:** `src/test/java/it/unive/lisa/tutorial/TwoVarLinearInequalityTest.java`  
+**IMP program:** `inputs/twovarlinearinequality.imp`
+---
+### Description
+
+Ce domaine est un **domaine abstrait relationnel**, conçu pour représenter des inégalités linéaires impliquant deux variables.  
+Il permet d’exprimer des contraintes de la forme **a·x + b·y ≤ c**, afin de capturer les relations linéaires entre variables.
+
+Contrairement aux domaines non relationnels, ce domaine est capable de suivre simultanément les relations entre plusieurs variables.  
+Lors de l’analyse des programmes, il permet de déduire de nouvelles contraintes, de simplifier les relations existantes, et de propager ces informations à travers les différents chemins d’exécution, contribuant ainsi à une analyse statique plus précise.
+---
+### Représentation concrète dans l’implémentation
+
+Dans l’implémentation, l’état abstrait est représenté par un **ensemble d’inégalités (Set of Inequalities)**.  
+Chaque contrainte est de la forme **a·x + b·y ≤ c**, où :
+- x et y sont des variables (`Identifier`),
+- a et b sont des coefficients entiers,
+- c est une constante.
+
+Chaque inégalité est modélisée par une instance de la classe `Inequality`, qui encapsule ces éléments et fournit des opérations auxiliaires telles que la normalisation et la comparaison (entailment).
+
+---
+### Lattice structure
+
+Dans ce domaine, nous définissons les opérations de base du treillis, incluant Top, Bottom, la relation d’ordre partiel ainsi que l’opérateur de jointure (lub).
+
+#### Top et Bottom
+
+- **Top** représente l’absence totale d’information, c’est-à-dire qu’aucune relation entre les variables n’est connue. Dans l’implémentation, Top est représenté par un ensemble vide d’inégalités.
+
+- **Bottom** représente un état incohérent (insatisfiable), où les contraintes sont contradictoires. Dans l’implémentation, il est représenté par une inégalité impossible (par exemple 0 ≤ -1).
 
 
-## Cartesian Product
+#### Relation d’ordre partiel (lessOrEqual)
 
-**Product test file:** to be completed  
-**IMP program:** to be completed
+La relation d’ordre est définie à partir de la notion d’implication entre ensembles de contraintes.
+
+Dans l’implémentation, nous calculons d’abord la closure des deux ensembles d’inégalités. Ensuite, nous vérifions que chaque contrainte de l’état cible est impliquée par au moins une contrainte de l’état courant.
+
+Si toutes les contraintes du second état sont impliquées, alors le premier état est considéré comme inférieur ou égal au second.
 
 
 
-## Notes
+#### Jointure (lub)
 
-The repository history is intended to clearly show the contribution of each group member through separate commits on the implemented components.
+L’opérateur de jointure permet de fusionner deux états abstraits.
+
+Dans l’implémentation, lorsque deux inégalités possèdent la même partie gauche (mêmes variables et coefficients), nous conservons la contrainte la plus faible, c’est-à-dire celle ayant la constante la plus grande.
+
+L’ensemble résultant est ensuite fermé à l’aide de l’opération de closure afin de dériver toutes les contraintes implicites.
+
+---
+
+### Abstract semantics
+
+Ce domaine définit la sémantique abstraite des affectations (`assign`) et des conditions (`assume`), permettant de mettre à jour l’ensemble des inégalités afin de refléter les relations entre variables au cours de l’exécution du programme.
+
+### Affectation (assign)
+
+Lors du traitement d’une affectation, toutes les contraintes impliquant la variable assignée sont d’abord supprimées (opération de *forget*), car elles ne sont plus valides après l’affectation.  
+Ensuite, de nouvelles contraintes sont ajoutées en fonction de la forme de l’expression.
+
+L’implémentation actuelle supporte les cas suivants :
+
+- Affectation par constante :  
+  `x = c`  
+  est traduite en :  
+  `x ≤ c` et `-x ≤ -c`
+
+- Affectation par variable :  
+  `x = y`  
+  est traduite en :  
+  `x - y ≤ 0` et `y - x ≤ 0`
+
+- Addition et soustraction :  
+  `x = y + c` ou `x = y - c`  
+  sont traduites en inégalités correspondantes, par exemple :  
+  `x - y ≤ c` et `y - x ≤ -c`
+
+- Formes avec multiplication :  
+  `x = a*y`、`x = a*y + c`、`x = a*y - c`  
+  sont transformées en contraintes linéaires équivalentes.
+
+Après l’ajout des nouvelles contraintes, une opération de closure est appliquée afin de déduire les relations implicites et de maintenir la cohérence de l’état.
+
+
+#### Conditions (assume)
+
+Lors du traitement des conditions, les expressions de comparaison sont converties en inégalités, puis ajoutées à l’état courant.
+
+Les formes supportées sont :
+
+- Comparaisons entre variables :  
+  `x ≤ y`、`x < y`、`x ≥ y`、`x > y`、`x == y`
+
+- Comparaisons entre variable et constante :  
+  `x ≤ c`、`x < c`、`x ≥ c`、`x > c`、`x == c`
+
+Les inégalités strictes sont transformées en inégalités larges sous sémantique entière, par exemple :
+
+- `x < y` devient `x - y ≤ -1`
+- `x > y` devient `y - x ≤ -1`
+
+Après l’ajout des contraintes, une closure est également appliquée pour enrichir l’ensemble des relations.
+
+
+#### Vérification de satisfiabilité (satisfies)
+
+La méthode `satisfies` permet de déterminer si une condition est toujours vraie, toujours fausse, ou indéterminée dans l’état courant.
+
+Cette décision repose sur les contraintes présentes :
+
+- Si l’état implique directement la condition, elle est considérée comme satisfaite (`SATISFIED`)
+- Si l’état implique une contradiction avec la condition, elle est considérée comme non satisfaite (`NOT_SATISFIED`)
+- Sinon, le résultat est `UNKNOWN`
+
+Cette fonctionnalité est utilisée pour analyser la faisabilité des branches conditionnelles.
+
+---
+### Closure
+
+Dans le domaine TwoVarLinearInequality, l’opération de closure permet d’enrichir l’ensemble des contraintes en déduisant des relations implicites entre variables.
+
+Par exemple :
+
+- x - y ≤ 2
+- y - z ≤ 3
+
+permettent de déduire :
+
+- x - z ≤ 5
+
+L’idée principale repose sur l’élimination de variables.
+
+Si deux inégalités partagent une variable avec des coefficients de signes opposés, il est possible de les combiner afin d’éliminer cette variable et de produire une nouvelle contrainte.
+
+Par exemple :
+
+- a x + b y ≤ c
+- d x + e y ≤ f
+
+Si a > 0 et d < 0, on peut éliminer la variable x et obtenir une nouvelle inégalité.
+
+#### Implémentation
+
+L’opération de closure est réalisée en plusieurs étapes :
+
+##### 1. Combinaison des inégalités (result)
+
+Toutes les paires d’inégalités sont examinées.  
+Si elles partagent des variables compatibles et permettent une élimination, une nouvelle inégalité est générée.
+
+##### 2. Union des contraintes
+
+Les nouvelles inégalités sont ajoutées à l’ensemble courant :
+
+- current = current ∪ result(current)
+
+##### 3. Filtrage (filter)
+
+Certaines contraintes sont éliminées :
+
+- contraintes triviales
+- contraintes contradictoires (par exemple : 0x + 0y ≤ -1)
+
+Si une contradiction est détectée, l’état correspond à Bottom.
+
+##### 4. Itération contrôlée
+
+La closure est appliquée de manière itérative, avec un nombre limité d’itérations afin d’éviter une explosion du nombre de contraintes.
+
+Dans notre implémentation, le nombre d’itérations est proportionnel à log2(n - 1), où n est le nombre de variables.
+
+---
+### Test : 
+
+#### Assignations de base
+
+Ce test a pour objectif de vérifier le bon fonctionnement de l’opération d’assignation (assign) dans le domaine TwoVarLinearInequality.
+
+Le programme contient une suite d’assignations simples :
+
+```java
+basic() {
+  def x = 0;
+  def y = x + 1;
+  def z = y + 1;
+}
+```
+
+Ces instructions permettent de construire progressivement des relations linéaires entre les variables.
+
+![refineRange](images/TVLQ_basic.png)
+La figure montre l’état abstrait obtenu à la fin de l’analyse. On peut observer que les relations suivantes sont correctement déduites :
+
+- x ≤ 0 et -x ≤ 0
+- y - x ≤ 1
+- z - y ≤ 1
+
+De plus, grâce à l’opération de closure, certaines relations implicites peuvent également être déduites, par exemple :
+
+- x - z ≤ -2
+- z ≤ 2
+
+#### Conditions et inférence par closure
+
+Ce test a pour objectif de vérifier le bon fonctionnement du traitement des `assume` ainsi que de l’opération de `closure`.
+
+Le programme étend le cas des assignations simples en introduisant des conditions imbriquées :
+```java
+closure_test() {
+  def x = 0;
+  def y = x + 1;
+  def z = y + 1;
+
+  if (x < y) {
+    if (y < z) {
+      def a = z;
+    }
+  }
+}
+```
+
+Ces conditions introduisent progressivement des relations d’ordre entre les variables, permettant de construire des contraintes plus riches.
+
+La figure ci-dessous montre l’état abstrait à l’intérieur des conditions imbriquées (lorsque les deux conditions sont satisfaites) :
+![refineRange](images/TVLQ_closure.png)
+
+À ce point du programme, on a :
+
+- x < y
+- y < z
+
+On peut observer que ces conditions sont correctement traduites en contraintes linéaires, par exemple :
+
+- x - y ≤ -1
+- y - z ≤ -1
+
+De plus, grâce à l’opération de closure, le domaine est capable de déduire des relations implicites, par exemple :
+
+- x - z ≤ -2
+
+Cela montre que le domaine ne se limite pas à représenter des contraintes, mais qu’il est également capable de les combiner afin d’effectuer des inférences relationnelles, améliorant ainsi la précision de l’analyse statique.
+
+---
+
+## Product
+
+Dans ce projet, nous avons construit un domaine produit en combinant **OverflowInterval** et **TwoVarLinearInequality** à l’aide de **CartesianProduct**.
+
+Ce domaine produit permet de conserver simultanément deux types d’informations :
+
+- **OverflowInterval** : permet de représenter les intervalles de valeurs des variables
+- **TwoVarLinearInequality** : permet de capturer les contraintes linéaires entre variables
+
+Grâce à cette combinaison, l’analyse peut à la fois refléter les bornes numériques des variables et exprimer les dépendances entre elles, ce qui améliore la précision globale de l’analyse.
+
+### Test :
+
+Ce test vise à vérifier que le domaine produit est capable de combiner les informations d’intervalles et les relations entre variables.
+
+```java
+product_test() {
+  def x = 0;
+  def y = x + 1;
+  def z = y + 1;
+
+  if (x < y) {
+    if (y < z) {
+      def a = z;
+    }
+  }
+}
+```
+#### État 1 : phase d’assignation
+
+La figure suivante montre l’état abstrait après l’instruction `z = y + 1` :
+
+![refineRange](images/product1.png)
+
+On peut observer que :
+
+- OverflowInterval infère des valeurs précises :
+  - x ∈ [0, 0]
+  - y ∈ [1, 1]
+  - z ∈ [2, 2]
+
+- En parallèle, TwoVarLinearInequality capture les relations :
+  - y - x ≤ 1
+  - z - y ≤ 1
+  - x - z ≤ -2 (déduit par closure)
+
+Cela montre que le produit permet de conserver simultanément les informations numériques et relationnelles.
+
+---
+
+#### État 2 : sous contraintes conditionnelles
+
+La figure suivante montre l’état abstrait à l’intérieur des conditions imbriquées (lors de `a = z`) :
+
+![refineRange](images/product2.png)
+
+À ce point :
+
+- x < y
+- y < z
+
+Ces conditions sont traduites en :
+
+- x - y ≤ -1
+- y - z ≤ -1
+
+et permettent de déduire :
+
+- x - z ≤ -2
+
+En même temps, le domaine d’intervalles conserve des valeurs précises :
+
+- a ∈ [2, 2]
+
+Cela démontre que le domaine produit est capable de propager à la fois les contraintes numériques et relationnelles dans le flot de contrôle.
