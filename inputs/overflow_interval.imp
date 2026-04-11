@@ -70,12 +70,4 @@ class overflow {
 		return y;
 	}
 
-    reduction_no_relation() {
-        def x = 0;
-        def y = x + 10;
-
-         if (y <= 5) {
-            def a = y;
-         }
-    }
 }

@@ -668,7 +668,11 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
      * 3. Keeping only the tightest constraints
      */
     private Set<Inequality> sanitize(Set<Inequality> set) {
-        for (Inequality ineq : set) {
+        Set<Inequality> normalized = new HashSet<>();
+        for (Inequality ineq : set)
+            normalized.add(ineq.normalize());
+
+        for (Inequality ineq : normalized) {
             if (ineq.isUnsatisfiable()) {
                 Set<Inequality> bottomSet = new HashSet<>();
                 bottomSet.add(new Inequality(0, null, 0, null, -1));
@@ -676,7 +680,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
             }
         }
 
-        Set<Inequality> cleaned = removeTrivial(set);
+        Set<Inequality> cleaned = removeTrivial(normalized);
         cleaned = tighten(cleaned);
         return cleaned;
     }
@@ -994,8 +998,6 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                 na = nb;
                 nb = tmpCoeff;
             }
-
-
 
             return new Inequality(na, nx, nb, ny, nc);
         }

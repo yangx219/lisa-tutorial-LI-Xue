@@ -363,10 +363,21 @@ Cette décision repose sur les contraintes présentes :
 Cette fonctionnalité est utilisée pour analyser la faisabilité des branches conditionnelles.
 
 ---
+
+### Normalisation des inégalités
+
+Dans notre implémentation, les contraintes sont normalisées afin d’obtenir une représentation canonique. Cette étape est essentielle pour faciliter la comparaison des contraintes, la suppression des doublons et l’identification des contraintes redondantes.
+
+La normalisation repose sur deux principes principaux :
+
+- une réduction des coefficients et de la constante par leur plus grand commun diviseur (gcd), afin de simplifier l’inégalité ;
+- une mise en ordre déterministe des variables lorsque deux variables apparaissent dans la contrainte, de manière à éviter que deux contraintes équivalentes soient représentées sous des formes différentes.
+
+Par exemple, les contraintes `x + y ≤ 5` et `y + x ≤ 5` sont transformées en une représentation unique, ce qui permet de garantir la cohérence de l’ensemble des inégalités.
+
+
 ### Closure
-
-Dans le domaine TwoVarLinearInequality, l’opération de closure permet d’enrichir l’ensemble des contraintes en déduisant des relations implicites entre variables.
-
+Dans le domaine TwoVarLinearInequality, après normalisation des contraintes, l’opération de closure permet d’enrichir l’ensemble des contraintes en déduisant des relations implicites entre variables.
 Par exemple :
 
 - x - y ≤ 2
@@ -501,67 +512,24 @@ Ce domaine produit permet de conserver simultanément deux types d’information
 
 Grâce à cette combinaison, l’analyse peut à la fois refléter les bornes numériques des variables et exprimer les dépendances entre elles, ce qui améliore la précision globale de l’analyse.
 
+En outre, nous avons introduit un mécanisme de réduction  au sein du produit, permettant une interaction entre les deux domaines.
+
+Plus précisément :
+  - le domaine des intervalles peut déduire des relations entre variables à partir des bornes numériques et les transmettre au domaine relationnel
+  - inversement, les contraintes du domaine relationnel (par exemple des bornes supérieures ou inférieures) peuvent raffiner les intervalles
+
 ### Test :
 
-Ce test vise à vérifier que le domaine produit est capable de combiner les informations d’intervalles et les relations entre variables.
-
+Afin de mettre en évidence l’effet de la réduction du produit cartésien sur l’amélioration conjointe des deux domaines, nous avons conçu le programme de test suivant :
 ```java
-product_test() {
+reduction_relation() {
   def x = 0;
-  def y = x + 1;
+  def y = 1;
   def z = y + 1;
-
-  if (x < y) {
-    if (y < z) {
-      def a = z;
-    }
-  }
 }
 ```
-#### État 1 : phase d’assignation
+L’objectif de ce test est d’observer, à différents points du programme, si la réduction permet de déduire des relations supplémentaires entre variables à partir du domaine des intervalles.
 
-La figure suivante montre l’état abstrait après l’instruction `z = y + 1` :
-
-![refineRange](images/product1.png)
-
-On peut observer que :
-
-- OverflowInterval infère des valeurs précises :
-  - x ∈ [0, 0]
-  - y ∈ [1, 1]
-  - z ∈ [2, 2]
-
-- En parallèle, TwoVarLinearInequality capture les relations :
-  - y - x ≤ 1
-  - z - y ≤ 1
-  - x - z ≤ -2 (déduit par closure)
-
-Cela montre que le produit permet de conserver simultanément les informations numériques et relationnelles.
-
----
-
-#### État 2 : sous contraintes conditionnelles
-
-La figure suivante montre l’état abstrait à l’intérieur des conditions imbriquées (lors de `a = z`) :
-
-![refineRange](images/product2.png)
-
-À ce point :
-
-- x < y
-- y < z
-
-Ces conditions sont traduites en :
-
-- x - y ≤ -1
-- y - z ≤ -1
-
-et permettent de déduire :
-
-- x - z ≤ -2
-
-En même temps, le domaine d’intervalles conserve des valeurs précises :
-
-- a ∈ [2, 2]
-
-Cela démontre que le domaine produit est capable de propager à la fois les contraintes numériques et relationnelles dans le flot de contrôle.
+| | |
+|---|---|
+| ![refineRange](images/product_combin.png) ![refineRange](images/product_relation.png)
