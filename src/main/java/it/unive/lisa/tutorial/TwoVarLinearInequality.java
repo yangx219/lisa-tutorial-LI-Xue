@@ -862,7 +862,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
 
     public TwoVarLinearInequality addConstraint(Inequality ineq) {
         Set<Inequality> newSet = new HashSet<>(this.inequalities);
-        newSet.add(ineq);
+        newSet.add(ineq.normalize());
         return fromClosedSet(newSet);
     }
 
@@ -995,12 +995,7 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
                 nb = tmpCoeff;
             }
 
-            // first non-zero coefficient must be positive
-            if (na < 0 || (na == 0 && nb < 0)) {
-                na = -na;
-                nb = -nb;
-                nc = -nc;
-            }
+
 
             return new Inequality(na, nx, nb, ny, nc);
         }
