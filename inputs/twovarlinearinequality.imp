@@ -2,8 +2,9 @@ class twovarlinearinequality {
 
     basic() {
         def x = 0;
+        def z = 1;
         def y = x + 1;
-        def z = y + 1;
+        z = y + 1;
     }
 
     closure_test() {

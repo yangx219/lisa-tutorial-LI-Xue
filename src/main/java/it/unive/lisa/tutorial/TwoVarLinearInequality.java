@@ -859,6 +859,17 @@ public class TwoVarLinearInequality implements ValueDomain<TwoVarLinearInequalit
 
         return new TwoVarLinearInequality(closed);
     }
+
+    public TwoVarLinearInequality addConstraint(Inequality ineq) {
+        Set<Inequality> newSet = new HashSet<>(this.inequalities);
+        newSet.add(ineq);
+        return fromClosedSet(newSet);
+    }
+
+    public Set<Inequality> getConstraints() {
+        return new HashSet<>(close(this.inequalities));
+    }
+
     public static class Inequality {
         private final int a;
         private final Identifier x;

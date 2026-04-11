@@ -11,4 +11,11 @@ class overflowinterval_twovar_product {
             }
         }
     }
+    basic() {
+            def x = 0;
+            def z = 1;
+            def y = x + 1;
+            z = y + 1;
+        }
+
 }
