@@ -1,21 +1,20 @@
 class overflowinterval_twovar_product {
 
-    product_test() {
+    reduction_no_relation() {
         def x = 0;
-        def y = x + 1;
-        def z = y + 1;
+        def y = x + 10;
 
-        if (x < y) {
-            if (y < z) {
-                def a = z;
-            }
-        }
+         if (y <= 5) {
+            def a = y;
+         }
     }
-    basic() {
+    reduction_relation() {
             def x = 0;
-            def z = 1;
-            def y = x + 1;
-            z = y + 1;
-        }
+            def y = 1;
+
+            if (x < y) {
+                def a = y;
+            }
+    }
 
 }
