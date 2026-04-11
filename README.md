@@ -578,9 +578,9 @@ Cela montre que les relations supplémentaires fournies par la réduction renfor
 
 À travers ce test, on peut observer que :
 
-- La réduction (*reduction*) permet de déduire de nouvelles relations entre variables à partir des informations d’intervalle, renforçant ainsi l’expressivité du domaine relationnel.
+- La réduction permet de déduire de nouvelles relations entre variables à partir des informations d’intervalle, renforçant ainsi l’expressivité du domaine relationnel.
 
-- Dans les analyses ultérieures, ces nouvelles relations peuvent être utilisées pour enrichir le raisonnement, améliorant ainsi l’efficacité de la fermeture (*closure*).
+- Dans les analyses ultérieures, ces nouvelles relations peuvent être utilisées pour enrichir le raisonnement, améliorant ainsi l’efficacité de la closure.
 
 - Par conséquent, le domaine produit avec réduction offre une précision d’analyse plus élevée que le domaine relationnel seul.
 
