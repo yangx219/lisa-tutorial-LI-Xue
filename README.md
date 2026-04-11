@@ -1,78 +1,78 @@
-# TAS Project 2026
+# TAS Projet 2026
 
-## Authors
+## Auteurs
 - LI Mengxiao
 - YANG Xue
 
-## Implemented Domains
-- `OverflowInterval` — Intervals taking into account overflows (non-relational domain, difficulty 4)
-- `TwoVarLinearInequality` — Two variables per linear inequality (relational domain, difficulty 4)
-- `OverflowIntervalTwoVarCartesian` — Cartesian product of the two domains above
+## Domaines implémentés
+- `OverflowInterval` — Intervalles prenant en compte les débordements (domaine non relationnel, difficulté 4)
+- `TwoVarLinearInequality` — Deux variables par inégalité linéaire (domaine relationnel, difficulté 4)
+- `OverflowIntervalTwoVarCartesian` — Produit cartésien des deux domaines ci-dessus
 
 ---
 
-## Domain 1: OverflowInterval — Intervals taking into account overflows
+## Domaine 1 : OverflowInterval — Intervalles prenant en compte les débordements
 
-**Implementation file:** `src/main/java/it/unive/lisa/tutorial/OverflowInterval.java`  
-**Test file:** `src/test/java/it/unive/lisa/tutorial/OverflowIntervalTest.java`  
-**IMP program:** `inputs/overflow_interval.imp`
+**Fichier d'implémentation :** `src/main/java/it/unive/lisa/tutorial/OverflowInterval.java`  
+**Fichier de test :** `src/test/java/it/unive/lisa/tutorial/OverflowIntervalTest.java`  
+**Programme IMP :** `inputs/overflow_interval.imp`
 
 ### Description
 
-`OverflowInterval` is a non-relational abstract domain based on the standard interval domain (course section 4.5), extended to handle 32-bit signed integer overflow.
+`OverflowInterval` est un domaine abstrait non relationnel basé sur le domaine des intervalles standard (section 4.5 du cours), étendu pour gérer les débordements des entiers signés sur 32 bits.
 
-In the standard interval domain, variable values are represented as mathematical intervals `[low, high]` with bounds in `ℤ ∪ {-∞, +∞}`. This domain adapts that idea to machine arithmetic by restricting all bounds to the 32-bit signed integer range:
+Dans le domaine des intervalles standard, les valeurs des variables sont représentées par des intervalles mathématiques `[low, high]` avec des bornes dans `ℤ ∪ {-∞, +∞}`. Ce domaine adapte cette idée à l'arithmétique machine en restreignant toutes les bornes à la plage des entiers signés sur 32 bits :
 
 - `MIN = Integer.MIN_VALUE = -2147483648`
 - `MAX = Integer.MAX_VALUE = 2147483647`
 
-The key design decision is the **`normalize` function**: after every arithmetic operation, the result interval is checked against the machine range. If it fits within `[MIN, MAX]`, the precise interval is returned. If any bound exceeds the machine range, the result is conservatively approximated as `TOP = [MIN, MAX]`, meaning the value is unknown but still within the machine range.
+La décision de conception clé est la **fonction `normalize`** : après chaque opération arithmétique, l'intervalle résultant est vérifié par rapport à la plage machine. S'il est dans `[MIN, MAX]`, l'intervalle précis est retourné. Si une borne dépasse la plage machine, le résultat est approximé de manière conservative par `TOP = [MIN, MAX]`, ce qui signifie que la valeur est inconnue mais reste dans la plage machine.
 
-This design is **sound**: the analysis never claims a value is in an interval when the concrete value might lie outside it. It is simpler than the wrapped-interval approach from the reference paper, but fully compatible with LiSA's `BaseNonRelationalValueDomain` structure.
+Cette conception est **correcte (sound)** : l'analyse ne prétend jamais qu'une valeur est dans un intervalle si la valeur concrète pourrait se trouver à l'extérieur. Elle est plus simple que l'approche des intervalles enveloppés du papier de référence, mais entièrement compatible avec la structure `BaseNonRelationalValueDomain` de LiSA.
 
-### Lattice Structure
+### Structure du treillis
 
-| Element | Representation | Meaning |
-|---------|---------------|---------|
-| `TOP`   | `[MIN, MAX]`  | Any 32-bit integer value |
-| `BOTTOM`| `⊥`           | Unreachable state |
-| `[a,b]` | `[a, b]`      | Variable is in the range `[a,b]` |
+| Élément | Représentation | Signification |
+|---------|---------------|---------------|
+| `TOP`   | `[MIN, MAX]`  | N'importe quel entier 32 bits |
+| `BOTTOM`| `⊥`           | État non atteignable |
+| `[a,b]` | `[a, b]`      | La variable est dans la plage `[a,b]` |
 
-Lattice operations:
+Opérations du treillis :
 
-| Operation | Definition |
+| Opération | Définition |
 |-----------|-----------|
-| `lessOrEqual(a, b)` | `b.low ≤ a.low` and `a.high ≤ b.high` (b contains a) |
+| `lessOrEqual(a, b)` | `b.low ≤ a.low` et `a.high ≤ b.high` (b contient a) |
 | `lub(a, b)` | `normalize(min(a.low, b.low), max(a.high, b.high))` |
-| `glb(a, b)` | `normalize(max(a.low, b.low), min(a.high, b.high))`, or `BOTTOM` if empty |
-| `widening(a, b)` | Expands toward `MIN`/`MAX` instead of `±∞` to ensure termination |
+| `glb(a, b)` | `normalize(max(a.low, b.low), min(a.high, b.high))`, ou `BOTTOM` si vide |
+| `widening(a, b)` | S'étend vers `MIN`/`MAX` au lieu de `±∞` pour garantir la terminaison |
 
-### Abstract Semantics
+### Sémantique abstraite
 
-**Constant evaluation:** An integer constant `c` evaluates to the singleton interval `[c, c]`.
+**Évaluation des constantes :** Une constante entière `c` est évaluée à l'intervalle singleton `[c, c]`.
 
-**Unary negation:** `-[a, b]` is computed as `normalize(-b, -a)`. For example, `-[2, 5] = [-5, -2]`. Negating `MIN_VALUE` overflows and yields `TOP`.
+**Négation unaire :** `-[a, b]` est calculé comme `normalize(-b, -a)`. Par exemple, `-[2, 5] = [-5, -2]`. La négation de `MIN_VALUE` provoque un débordement et retourne `TOP`.
 
-**Binary arithmetic:**
+**Arithmétique binaire :**
 
-| Operator | Formula | Overflow handling |
-|----------|---------|-------------------|
+| Opérateur | Formule | Gestion du débordement |
+|-----------|---------|------------------------|
 | `[a,b] + [c,d]` | `normalize(a+c, b+d)` | `MAX+1` → `TOP` |
 | `[a,b] - [c,d]` | `normalize(a-d, b-c)` | `0-MIN` → `TOP` |
 | `[a,b] * [c,d]` | `normalize(min(ac,ad,bc,bd), max(ac,ad,bc,bd))` | `50000*50000` → `TOP` |
-| `[a,b] / [c,d]` | Uses `IntInterval.div`; divisor `[0,0]` → `BOTTOM` | Sound division |
+| `[a,b] / [c,d]` | Utilise `IntInterval.div` ; diviseur `[0,0]` → `BOTTOM` | Division correcte |
 
-**Comparison satisfiability (`satisfiesBinaryExpression`):** Determines whether a binary comparison is `SATISFIED`, `NOT_SATISFIED`, or `UNKNOWN` by analysing interval overlap and bounds. For example, `[3,5] < [7,9]` is `SATISFIED` since no overlap and `5 < 7`.
+**Satisfaisabilité des comparaisons (`satisfiesBinaryExpression`) :** Détermine si une comparaison binaire est `SATISFIED`, `NOT_SATISFIED` ou `UNKNOWN` en analysant le chevauchement et les bornes des intervalles. Par exemple, `[3,5] < [7,9]` est `SATISFIED` car il n'y a pas de chevauchement et `5 < 7`.
 
-**Branch refinement (`assumeBinaryExpression`):** When entering a conditional branch, the variable's interval is intersected with the range implied by the condition. For example, after `if (x < 10)`, the variable `x` is refined from `[MIN,MAX]` to `[MIN,9]`.
+**Raffinement de branche (`assumeBinaryExpression`) :** Lors de l'entrée dans une branche conditionnelle, l'intervalle de la variable est intersecté avec la plage impliquée par la condition. Par exemple, après `if (x < 10)`, la variable `x` est raffinée de `[MIN,MAX]` à `[MIN,9]`.
 
-### Test Program and Analysis Results
+### Programme de test et résultats d'analyse
 
-The file `inputs/overflow_interval.imp` contains nine test functions covering normal arithmetic, overflow detection, division semantics, and branch refinement.
+Le fichier `inputs/overflow_interval.imp` contient neuf fonctions de test couvrant l'arithmétique normale, la détection de débordement, la sémantique de division et le raffinement de branche.
 
 ---
 
-#### `basic()` — Precise arithmetic with no overflow
+#### `basic()` — Arithmétique précise sans débordement
 
 ```java
 basic() {
@@ -83,46 +83,46 @@ basic() {
 }
 ```
 
-All values stay within the machine range. The analysis is precise throughout: `x = [5,5]`, `y = [-5,-5]`, `z = [7,7]`.
+Toutes les valeurs restent dans la plage machine. L'analyse est précise tout au long : `x = [5,5]`, `y = [-5,-5]`, `z = [7,7]`.
 
 ![basic](images/overflow_basic.png)
 
 ---
 
-#### `addOverflow()` — Addition overflow
+#### `addOverflow()` — Débordement par addition
 
 ```java
 addOverflow() {
     def a = 2147483647;  // a = [MAX, MAX]
-    def b = a + 1;       // MAX+1 overflows → b = TOP
+    def b = a + 1;       // MAX+1 déborde → b = TOP
     return b;
 }
 ```
 
-`2147483647 + 1` exceeds `MAX`. The `normalize` function detects this and returns `TOP = [MIN, MAX]`.
+`2147483647 + 1` dépasse `MAX`. La fonction `normalize` détecte ce débordement et retourne `TOP = [MIN, MAX]`.
 
 ![addOverflow](images/overflow_addOverflow.png)
 
 ---
 
-#### `negOverflow()` — Negation overflow at MIN_VALUE
+#### `negOverflow()` — Débordement par négation de MIN_VALUE
 
 ```java
 negOverflow() {
     def c = -2147483647;  // c = [-(MAX), -(MAX)]
-    def m = c - 1;        // m = [MIN, MIN]  (precise, in range)
-    def d = 0 - m;        // -MIN overflows → d = TOP
+    def m = c - 1;        // m = [MIN, MIN]  (précis, dans la plage)
+    def d = 0 - m;        // -MIN déborde → d = TOP
     return d;
 }
 ```
 
-`Integer.MIN_VALUE` itself is representable exactly as `[MIN, MIN]`, but negating it (`-MIN = MAX+1`) exceeds the machine range, so `d = TOP`.
+`Integer.MIN_VALUE` est représentable exactement comme `[MIN, MIN]`, mais sa négation (`-MIN = MAX+1`) dépasse la plage machine, donc `d = TOP`.
 
 ![negOverflow](images/overflow_negOverflow.png)
 
 ---
 
-#### `division()` — Precise integer division
+#### `division()` — Division entière précise
 
 ```java
 division() {
@@ -133,30 +133,30 @@ division() {
 }
 ```
 
-The dividend is `[0,0]`, so the result is precisely `[0,0]`. No overflow occurs.
+Le dividende est `[0,0]`, donc le résultat est précisément `[0,0]`. Aucun débordement ne se produit.
 
 ![division](images/overflow_division.png)
 
 ---
 
-#### `divByZero()` — Division by zero yields BOTTOM
+#### `divByZero()` — Division par zéro retourne BOTTOM
 
 ```java
 divByZero() {
     def x = 5;
     def y = 0;
-    def z = x / y;  // divisor = [0,0] → BOTTOM
+    def z = x / y;  // diviseur = [0,0] → BOTTOM
     return z;
 }
 ```
 
-When the divisor is precisely `[0,0]`, the domain returns `BOTTOM`, marking this execution path as unreachable — the analysis detects a potential division-by-zero error.
+Lorsque le diviseur est précisément `[0,0]`, le domaine retourne `BOTTOM`, marquant ce chemin d'exécution comme non atteignable — l'analyse détecte une potentielle erreur de division par zéro.
 
 ![divByZero](images/overflow_divByZero.png)
 
 ---
 
-#### `mulOverflow()` — Multiplication overflow
+#### `mulOverflow()` — Débordement par multiplication
 
 ```java
 mulOverflow() {
@@ -167,82 +167,82 @@ mulOverflow() {
 }
 ```
 
-`50000 × 50000 = 2,500,000,000`, which exceeds `MAX = 2,147,483,647`. The four-corner product check detects this and `normalize` returns `TOP`.
+`50000 × 50000 = 2 500 000 000`, ce qui dépasse `MAX = 2 147 483 647`. La vérification des quatre coins détecte ce débordement et `normalize` retourne `TOP`.
 
 ![mulOverflow](images/overflow_mulOverflow.png)
 
 ---
 
-#### `branches()` — Precise branch analysis
+#### `branches()` — Analyse précise de branche
 
 ```java
 branches() {
     def x = 5;
     def y = 7;
     def z = 0;
-    if (x < y) z = x + 1;  // taken: z = [6,6]
-    else        z = y + 1;  // unreachable
+    if (x < y) z = x + 1;  // prise : z = [6,6]
+    else        z = y + 1;  // non atteignable
     return z;
 }
 ```
 
-`satisfiesBinaryExpression` determines that `[5,5] < [7,7]` is `SATISFIED`, so the else branch is recognised as unreachable. The final result is precisely `z = [6,6]`.
+`satisfiesBinaryExpression` détermine que `[5,5] < [7,7]` est `SATISFIED`, donc la branche else est reconnue comme non atteignable. Le résultat final est précisément `z = [6,6]`.
 
 ![branches](images/overflow_branches.png)
 
 ---
 
-#### `refine(a)` — Single branch refinement
+#### `refine(a)` — Raffinement de branche simple
 
 ```java
 refine(a) {
     def x = a;          // x = TOP
     def y = 0;
     if (x < 10)
-        y = x + 1;      // then: x in [MIN,9], y in [MIN+1,10]
+        y = x + 1;      // then : x dans [MIN,9], y dans [MIN+1,10]
     else
-        y = x - 1;      // else: x in [10,MAX], y in [9,MAX-1]
-    return y;           // lub: y = [MIN+1, MAX-1]
+        y = x - 1;      // else : x dans [10,MAX], y dans [9,MAX-1]
+    return y;           // lub : y = [MIN+1, MAX-1]
 }
 ```
 
-After merging both branches via `lub`, `y = [-2147483647, 2147483646]`. This is the exact join of `[MIN+1, 10]` and `[9, MAX-1]`, confirming that branch refinement and `lub` work correctly together.
+Après fusion des deux branches via `lub`, `y = [-2147483647, 2147483646]`. C'est la jointure exacte de `[MIN+1, 10]` et `[9, MAX-1]`, confirmant que le raffinement de branche et `lub` fonctionnent correctement ensemble.
 
 ![refine](images/overflow_refine.png)
 
 ---
 
-#### `refineRange(a)` — Nested branch refinement
+#### `refineRange(a)` — Raffinement de branche imbriquée
 
 ```java
 refineRange(a) {
     def x = a;          // x = TOP
     def y = 0;
-    if (x < 10)         // x refined to [MIN, 9]
-        if (x > 0)      // x further refined to [1, 9]
+    if (x < 10)         // x raffiné à [MIN, 9]
+        if (x > 0)      // x encore raffiné à [1, 9]
             y = x + 1;  // y = [2, 10]
     return y;
 }
 ```
 
-`assumeBinaryExpression` successively narrows `x`:
-- After `x < 10`: `x ∩ [MIN, 9] = [MIN, 9]`
-- After `x > 0`: `x ∩ [1, MAX] = [1, 9]`
-- Result inside the inner branch: `y = [1,9] + [1,1] = [2,10]`
+`assumeBinaryExpression` affine successivement `x` :
+- Après `x < 10` : `x ∩ [MIN, 9] = [MIN, 9]`
+- Après `x > 0` : `x ∩ [1, MAX] = [1, 9]`
+- Résultat dans la branche interne : `y = [1,9] + [1,1] = [2,10]`
 
-This is the key demonstration that the domain correctly tracks value ranges through nested conditionals.
+C'est la démonstration clé que le domaine suit correctement les plages de valeurs à travers des conditions imbriquées.
 
 ![refineRange](images/overflow_refineRange.png)
 
 ### Limitations
 
-- **Overflow loses all precision**: any operation that exceeds the 32-bit range returns `TOP` rather than a wrapped interval. This is sound but may be less precise than a wrapped-interval approach.
-- **No relational information**: as a non-relational domain, it cannot represent relationships between variables (e.g., `x < y`).
-- **Widening to bounds**: the widening operator jumps directly to `MIN`/`MAX`, which is sound but may cause fast precision loss in loop analysis.
+- **Le débordement perd toute précision** : toute opération dépassant la plage 32 bits retourne `TOP` plutôt qu'un intervalle enveloppé. C'est correct mais peut être moins précis qu'une approche par intervalles enveloppés.
+- **Pas d'information relationnelle** : en tant que domaine non relationnel, il ne peut pas représenter les relations entre variables (par exemple, `x < y`).
+- **Élargissement vers les bornes** : l'opérateur de widening saute directement à `MIN`/`MAX`, ce qui est correct mais peut entraîner une perte rapide de précision dans l'analyse des boucles.
 
 
 ---
-## Domain 2: TwoVarLinearInequality
+## Domaine 2 : TwoVarLinearInequality — Deux variables par inégalité linéaire
 
 **Implementation file:** `src/main/java/it/unive/lisa/tutorial/TwoVarLinearInequality.java`  
 **Test file:** `src/test/java/it/unive/lisa/tutorial/TwoVarLinearInequalityTest.java`  
@@ -302,7 +302,7 @@ L’ensemble résultant est ensuite fermé à l’aide de l’opération de clos
 
 ---
 
-### Abstract semantics
+### Sémantique abstraite
 
 Ce domaine définit la sémantique abstraite des affectations (`assign`) et des conditions (`assume`), permettant de mettre à jour l’ensemble des inégalités afin de refléter les relations entre variables au cours de l’exécution du programme.
 
