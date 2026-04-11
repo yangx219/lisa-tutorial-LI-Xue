@@ -518,6 +518,8 @@ Plus précisément :
   - le domaine des intervalles peut déduire des relations entre variables à partir des bornes numériques et les transmettre au domaine relationnel
   - inversement, les contraintes du domaine relationnel (par exemple des bornes supérieures ou inférieures) peuvent raffiner les intervalles
 
+---
+
 ### Test :
 
 Afin de mettre en évidence l’effet de la réduction du produit cartésien sur l’amélioration conjointe des deux domaines, nous avons conçu le programme de test suivant :
@@ -530,6 +532,46 @@ reduction_relation() {
 ```
 L’objectif de ce test est d’observer, à différents points du programme, si la réduction permet de déduire des relations supplémentaires entre variables à partir du domaine des intervalles.
 
-| | |
-|---|---|
-| ![refineRange](images/product_combin.png) ![refineRange](images/product_relation.png)
+#### 1. Analyse au point def y = 1;
+Nous comparons ici :
+  - le domaine relationnel seul(right)
+ - le domaine produit avec reduction(left)
+
+<p align="center">
+  <img src="images/product_combin.png" width="45%" />
+  <img src="images/product_relation.png" width="45%" />
+</p>
+On peut observer par comparaison :
+
+- Lorsqu'on utilise uniquement le domaine relationnel, on ne peut obtenir que des contraintes univariées sur les variables, par exemple `x = 0` et `y = 1`.
+
+- En introduisant la réduction, le domaine des intervalles fournit des informations précises sur les valeurs possibles (`x ∈ [0,0]`, `y ∈ [1,1]`), ce qui permet de déduire des relations supplémentaires :
+  - x - y <= -1
+
+Cela montre que la réduction permet de transformer les informations d'intervalle en relations entre variables, renforçant ainsi l'expressivité du domaine relationnel.
+
+
+#### 2. Analyse au point def z = y + 1;
+<p align="center">
+  <img src="images/product_combin1.png" width="45%" />
+  <img src="images/product_relation1.png" width="45%" />
+</p>
+
+On peut observer par comparaison :
+
+- Sans réduction, le domaine relationnel enregistre principalement les relations issues directement des affectations, par exemple `y < z`.
+
+- Après l’introduction de la réduction, puisque l’on a déjà déduit `x < y`, en combinant avec la nouvelle relation `y < z`, on peut, via la closure, déduire :
+  - x - z <= -2
+
+Cela montre que les relations supplémentaires fournies par la réduction renforcent la capacité d’inférence de la closure, permettant ainsi de déduire davantage de contraintes implicites.
+
+À travers ce test, on peut observer que :
+
+- La réduction (*reduction*) permet de déduire de nouvelles relations entre variables à partir des informations d’intervalle, renforçant ainsi l’expressivité du domaine relationnel.
+
+- Dans les analyses ultérieures, ces nouvelles relations peuvent être utilisées pour enrichir le raisonnement, améliorant ainsi l’efficacité de la fermeture (*closure*).
+
+- Par conséquent, le domaine produit avec réduction offre une précision d’analyse plus élevée que le domaine relationnel seul.
+
+---
