@@ -243,9 +243,11 @@ This is the key demonstration that the domain correctly tracks value ranges thro
 
 ---
 ## Domain 2: TwoVarLinearInequality
+
 **Implementation file:** `src/main/java/it/unive/lisa/tutorial/TwoVarLinearInequality.java`  
 **Test file:** `src/test/java/it/unive/lisa/tutorial/TwoVarLinearInequalityTest.java`  
 **IMP program:** `inputs/twovarlinearinequality.imp`
+
 ---
 ### Description
 
@@ -254,7 +256,9 @@ Il permet d’exprimer des contraintes de la forme **a·x + b·y ≤ c**, afin d
 
 Contrairement aux domaines non relationnels, ce domaine est capable de suivre simultanément les relations entre plusieurs variables.  
 Lors de l’analyse des programmes, il permet de déduire de nouvelles contraintes, de simplifier les relations existantes, et de propager ces informations à travers les différents chemins d’exécution, contribuant ainsi à une analyse statique plus précise.
+
 ---
+
 ### Représentation concrète dans l’implémentation
 
 Dans l’implémentation, l’état abstrait est représenté par un **ensemble d’inégalités (Set of Inequalities)**.  
@@ -266,6 +270,7 @@ Chaque contrainte est de la forme **a·x + b·y ≤ c**, où :
 Chaque inégalité est modélisée par une instance de la classe `Inequality`, qui encapsule ces éléments et fournit des opérations auxiliaires telles que la normalisation et la comparaison (entailment).
 
 ---
+
 ### Lattice structure
 
 Dans ce domaine, nous définissons les opérations de base du treillis, incluant Top, Bottom, la relation d’ordre partiel ainsi que l’opérateur de jointure (lub).
@@ -534,8 +539,8 @@ L’objectif de ce test est d’observer, à différents points du programme, si
 
 #### 1. Analyse au point def y = 1;
 Nous comparons ici :
-  - le domaine relationnel seul(right)
- - le domaine produit avec reduction(left)
+  - le domaine relationnel seul(à droite)
+ - le domaine produit avec reduction(à gauche)
 
 <p align="center">
   <img src="images/product_combin.png" width="45%" />
@@ -552,10 +557,15 @@ Cela montre que la réduction permet de transformer les informations d'intervall
 
 
 #### 2. Analyse au point def z = y + 1;
+
 <p align="center">
   <img src="images/product_combin1.png" width="45%" />
-  <img src="images/product_relation1.png" width="45%" />
+  <img src="images/product_relation1.png" width="50%" />
 </p>
+
+Nous comparons ici :
+  - le domaine relationnel seul(à droite)
+ - le domaine produit avec reduction(à gauche)
 
 On peut observer par comparaison :
 
